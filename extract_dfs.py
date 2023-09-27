@@ -5,7 +5,6 @@ from datetime import datetime
 import json
 from pymongo import MongoClient
 
-#! todo: read year from first sheet
 year = 2022
 weekdays = [
     "Sunday",
@@ -69,8 +68,7 @@ def boundaries(a, start, end):
 
 
 def prepare_dfs():
-    dfs = []
-    # meta_rows = [list() for x in sheets]
+    dfs = []    
     for index, sheet in enumerate(sheets):
         if index in config["skip_sheets"]:
             continue
@@ -78,8 +76,7 @@ def prepare_dfs():
         df = xl.parse(sheet, header=None)
         if config["meta_rows"] != None:
             if index in config["meta_rows"].keys():
-                for rows in config["meta_rows"][index]:
-                    # meta_rows[index].append(df.iloc[rows])
+                for rows in config["meta_rows"][index]:                    
                     dfs.append(
                         {"sheet": f"meta-{sheet}", "index": index, "df": df.iloc[rows]}
                     )
@@ -103,8 +100,6 @@ def prepare_dfs():
                 if tdf.size > 1:
                     # print(tdf.size)
                     dfs.append({"sheet": sheet, "index": index, "df": tdf})
-
-            # input("Enter any key...")
         else:
             dfs.append({"sheet": sheet, "index": index, "df": df})
     return dfs
@@ -112,33 +107,21 @@ def prepare_dfs():
 
 def export_glance_to_mongo(dictdata, dates):
     if len(dates) == 0:
-        # case: glance 1 - not implemented yet, need to think about storing cumulatives...
         return
 
     alldates = pd.date_range(dates[0], dates[1], freq="d")
-    weekdates = dict(zip(weekdays, alldates))
-    # print(weekdates)
+    weekdates = dict(zip(weekdays, alldates))    
     for d in dictdata:
         collection_name = d["Rtype"].lower()
         if (
             collection_name not in db.list_collection_names()
             and config["save_to_db"] == True
-        ):
-            # print(f"Creating Collection {collection_name}")
+        ):            
             db.create_collection(
                 collection_name,
                 timeseries={"timeField": "timestamp", "metaField": "metadata"},
             )
-            # command = f"""db.{collection_name}.createIndex({{"metadata.label":-1, "timestamp":1}},{{"unique":true}})"""
-            # db.command(command, collection_name)
-            # print(command)
-            # following index will avoid duplicates, but its not supported until monogo 6.3
-            # failed with error : Unique indexes are not supported on collections clustered by _id
-            # so either update mongodb to latest version, or employ other method to avoid duplicates
-            # like update : upsert
-            # db[collection_name].create_index(
-            #     [("timestamp", 1), ("metadata.label", -1)], unique=True
-            # )
+            
 
         label_name = d["Label"]
         for wd in weekdays:
@@ -152,20 +135,6 @@ def export_glance_to_mongo(dictdata, dates):
             }
             if config["save_to_db"] == True:
                 db[collection_name].insert_one(record)
-            # using update_one with upsert=True inorder to avoid duplicates
-            # but failed with error : Cannot perform a non-multi update on a time-series collection
-            # db[collection_name].update_one(
-            #     {"timestamp": weekdates[wd], "metadata": {"label": label_name}},
-            #     {
-            #         "$set": {
-            #             "change": change,
-            #             "change_rate": change_rate,
-            #         }
-            #     },
-            #     upsert=True,
-            # )
-
-
 extra_dfs = {}
 
 
@@ -181,9 +150,6 @@ def prepare_other_sheet(dfo, collection_name):
             collection_name,
             timeseries={"timeField": "timestamp", "metaField": "metadata"},
         )
-        # db[collection_name].create_index(
-        #     [("timestamp", 1), ("metadata.label", -1)], unique=True
-        # )
     df = dfo["df"]
     df.replace("Exchange Rate*", np.nan, inplace=True)
     df.dropna(axis="columns", how="all", inplace=True)
@@ -276,13 +242,7 @@ def prepare_daily_sheet(dfo):
     df = dfo["df"]
     df.dropna(axis="columns", how="all", inplace=True)
     df.dropna(axis="rows", how="all", inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    # year = 2023
-    # if df.shape[0] < 9:
-    # datestr = df.iloc[0, 0]
-    # datestr = datestr.split(",")
-    # year = datestr[len(datestr) - 1].strip()
-    # print(year)
+    df.reset_index(drop=True, inplace=True)    
     if df.shape[0] >= 9:
         collection_name = df.iloc[0, 0]
         if pd.isnull(collection_name):
@@ -326,19 +286,15 @@ def prepare_daily_sheet(dfo):
                 db.create_collection(
                     collection_name,
                     timeseries={"timeField": "timestamp", "metaField": "metadata"},
-                )
-                # db[collection_name].create_index(
-                #     [("timestamp", 1), ("metadata.label", -1)], unique=True
-                # )
-                # create index if neccessary
+                )                
+                
             for r in range(df_change.shape[0]):
                 label_name = df_change.iloc[r, 0]
                 for d in range(1, df_change.shape[1]):
                     change = df_change.iloc[r, d]
                     change_rate = df_rchange.iloc[r, d]
                     record = {
-                        "metadata": {"label": label_name},
-                        # "timestamp": dates[d - 1].strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                        "metadata": {"label": label_name},                        
                         "timestamp": alldates[d - 1],
                         "change": change,
                         "change_rate": change_rate,
